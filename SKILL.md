@@ -379,7 +379,8 @@ Then tell user:
 > - It will show "Pairing required" — this is normal
 >
 > **Step 2.** Go to the **Admin Panel** page (`{WORKER_URL}/_admin/`)
-> - You will see a **Pending Pairing Request**
+> - Click **"Refresh"** next to Pending Pairing Requests
+> - You will see a **Pending Pairing Request** appear
 > - Click **"Approve"** (or **"Approve All"**)
 >
 > **Step 3.** Go back to the **Dashboard** page
