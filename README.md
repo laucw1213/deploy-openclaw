@@ -1,121 +1,143 @@
 # Deploy OpenClaw
 
-An AI Skill that deploys [OpenClaw](https://github.com/openclaw/openclaw) on Cloudflare Workers + Containers via [Moltworker](https://github.com/cloudflare/moltworker).
+Deploy [OpenClaw](https://github.com/openclaw/openclaw) AI Bot on Cloudflare — fully automated by AI.
 
-Designed for AI agents (Claude Code, Claude Desktop, OpenClaw) to execute — not for humans to run manually.
+> Tell your AI agent _"Deploy a new AI bot for me"_ and it handles everything.
 
-## What it does
+## How it works
 
-Deploys a fully configured OpenClaw AI Bot with one command. The AI agent reads `SKILL.md` and executes all steps automatically.
-
-```
-User: "Deploy a new AI bot for me"
-  → AI installs dependencies (brew, node, wrangler, docker)
-  → AI creates CF resources (R2, AI Gateway)
-  → AI sets 14 secrets
-  → AI builds + deploys Worker + Container
-  → AI configures Telegram webhook + pairing
-  → User gets a working Telegram bot + Dashboard
-```
-
-## Architecture
+This is an **AI Skill** — a set of instructions that AI agents (Claude Code, Claude Desktop, OpenClaw) read and execute. The AI does the heavy lifting; you just answer a few questions.
 
 ```
-Telegram / Dashboard
-        ↓
-Worker (Moltworker)     ← Cloudflare Workers
-  - Auth, routing, container lifecycle
-        ↓
-Container (OpenClaw)    ← Cloudflare Containers
-  - AI Agent, conversation, tools
-        ↓
-AI Gateway              ← Cloudflare AI Gateway
-  - Logging, rate limiting
-        ↓
-Workers AI (nemotron-3-120b-a12b)
+You:  "Deploy a new AI bot for me"
+AI:   Installing tools... creating resources... deploying...
+AI:   "Done! Send 'hi' to your bot on Telegram."
+You:  "hi"
+Bot:  "Hey! I'm your new AI assistant. How can I help?"
 ```
 
-## Prerequisites
+## What you need
 
-- macOS
-- Cloudflare account with Workers Paid Plan ($5/month)
-- Telegram account
+- A Mac
+- A Cloudflare account ([Workers Paid Plan](https://dash.cloudflare.com/) — $5/month)
+- [Telegram](https://telegram.org/) installed
 
-## User input required
+That's it. The AI installs everything else (Node.js, Docker, wrangler CLI).
 
-| Input | Required | One-time? |
-|-------|----------|-----------|
-| Cloudflare API Token | Yes | Yes (reusable) |
-| Telegram Bot Token | Yes | Per bot |
-| AI Gateway Auth Token | Yes | Per bot |
-| R2 API Token | Optional | Per bot |
-| AI Model | Optional | Default: nemotron-3-120b-a12b |
-| Instance name | Optional | Default: openclaw |
-| Pairing code | Yes | Per bot |
+## What you'll do vs what the AI does
+
+```mermaid
+flowchart TD
+    U1["🔑 Create CF API Token<br/>(one-time setup)"]:::user --> A1["Install tools<br/>brew, node, wrangler, docker"]:::auto
+    U2["🤖 Create Telegram Bot<br/>via BotFather"]:::user --> A2["Get Account ID + Subdomain"]:::auto
+    A1 --> A2
+    A2 --> A3["Prepare source code"]:::auto
+    A3 --> A4["Install dependencies"]:::auto
+    A4 --> A5["Create R2 Bucket + AI Gateway"]:::auto
+    A5 --> U3["🔑 Create AI Gateway Token<br/>in Dashboard"]:::user
+    U3 --> U4["🔑 Create R2 Token<br/>in Dashboard (optional)"]:::user
+    U4 --> A6["Configure 14 secrets"]:::auto
+    A6 --> A7["Build + Deploy<br/>3-5 minutes"]:::auto
+    A7 --> A8["Set up Telegram webhook"]:::auto
+    A8 --> A9["Start container"]:::auto
+    A9 --> U5["💬 Send 'hi' to bot<br/>share pairing code"]:::user
+    U5 --> A10["Approve Telegram pairing"]:::auto
+    A10 --> A11["Open Dashboard + Admin"]:::auto
+    A11 --> U6["✅ Click Approve<br/>in Admin panel"]:::user
+    U6 --> Done["🎉 Your bot is live!"]:::done
+
+    classDef user fill:#ffcdd2,stroke:#c62828,color:#000
+    classDef auto fill:#c8e6c9,stroke:#2e7d32,color:#000
+    classDef done fill:#bbdefb,stroke:#1565c0,color:#000
+```
+
+| | Count | Examples |
+|---|---|---|
+| 🔴 **You do** | 6 steps | Create tokens, send "hi", click Approve |
+| 🟢 **AI does** | 11 steps | Install, build, deploy, configure |
 
 ## What gets created
 
-| Resource | Name |
-|----------|------|
-| Worker | `{name}.{subdomain}.workers.dev` |
-| Container | Runs OpenClaw inside |
-| AI Gateway | `{name}-gateway` |
-| R2 Bucket | `{name}-data` |
-| 14 Secrets | Auto-configured |
+```
+Telegram / Web Dashboard
+        ↓
+┌─────────────────────────┐
+│  Worker (Moltworker)    │  ← Cloudflare Workers
+│  Routing + Auth         │
+└───────────┬─────────────┘
+            ↓
+┌─────────────────────────┐
+│  Container (OpenClaw)   │  ← Cloudflare Containers
+│  AI Agent + Tools       │
+└───────────┬─────────────┘
+            ↓
+┌─────────────────────────┐
+│  AI Gateway             │  ← Cloudflare AI Gateway
+│  Logging + Protection   │
+└───────────┬─────────────┘
+            ↓
+      Workers AI Model
+   (nemotron-3-120b-a12b)
+```
+
+| Resource | Name | Purpose |
+|----------|------|---------|
+| Worker | `{name}.{subdomain}.workers.dev` | Entry point, auth, routing |
+| Container | (auto-created) | Runs the AI agent |
+| AI Gateway | `{name}-gateway` | Logs, rate limits AI requests |
+| R2 Bucket | `{name}-data` | Persists data across restarts |
+| Secrets | 14 total | API keys, tokens, config |
+
+## Quick start
+
+### Option 1: As an OpenClaw Skill
+
+Copy this folder to your OpenClaw skills directory. Then ask your agent:
+
+> "Deploy a new OpenClaw bot"
+
+### Option 2: With Claude Code or Claude Desktop
+
+Point the AI to `SKILL.md` and say:
+
+> "Follow the instructions in SKILL.md to deploy a new OpenClaw bot"
+
+### Option 3: Manual
+
+Read `SKILL.md` for the complete step-by-step commands.
 
 ## File structure
 
 ```
 deploy-openclaw/
-├── SKILL.md              ← AI agent instructions (the "script")
-├── README.md             ← This file
-└── moltworker/           ← Bundled source code snapshot
-    ├── Dockerfile        ← Node 22.16.0 + OpenClaw 2026.3.13
-    ├── start-openclaw.sh ← Container startup + config patch
-    ├── wrangler.jsonc    ← Worker + Container config
-    ├── package.json
-    ├── src/              ← Worker source (TypeScript)
-    ├── skills/           ← Built-in skills (browser)
-    └── public/           ← Dashboard assets
+├── SKILL.md              ← Instructions for the AI agent
+├── README.md             ← You are here
+└── moltworker/           ← Pre-configured source code
+    ├── Dockerfile        ← Container image definition
+    ├── start-openclaw.sh ← Startup script + config
+    ├── wrangler.jsonc    ← Worker + Container settings
+    ├── package.json      ← Dependencies
+    ├── src/              ← Worker code (TypeScript)
+    ├── skills/           ← Built-in skills
+    └── public/           ← Dashboard UI assets
 ```
-
-## Usage
-
-### As an OpenClaw Skill
-
-Copy this folder into your OpenClaw skills directory. The agent will use `SKILL.md` when asked to deploy a new bot.
-
-### With Claude Code / Claude Desktop
-
-Point the AI to `SKILL.md` and ask it to deploy:
-
-```
-"Deploy a new OpenClaw bot using the deploy-openclaw skill"
-```
-
-### Manual reference
-
-See `SKILL.md` for the complete step-by-step process. All commands are documented there.
 
 ## Versions
 
 | Component | Version |
 |-----------|---------|
 | OpenClaw | 2026.3.13 |
-| Node.js (container) | 22.16.0 |
-| Moltworker | Snapshot from 2026-03-25 |
-| Container instance | standard-2 (2 vCPU, 4GB RAM) |
+| Node.js (in container) | 22.16.0 |
+| Moltworker | Snapshot 2026-03-25 |
+| Container size | standard-2 (2 vCPU, 4GB RAM) |
 
 ## Updating
 
-To update OpenClaw or Moltworker:
-
-1. Clone latest [moltworker](https://github.com/cloudflare/moltworker)
-2. Copy essential files into `moltworker/` (see current structure)
-3. Apply the same modifications to `start-openclaw.sh` (auth order + allowedOrigins)
+1. Clone latest [cloudflare/moltworker](https://github.com/cloudflare/moltworker)
+2. Copy files into `moltworker/` (keep current structure)
+3. Re-apply modifications to `start-openclaw.sh` (auth order + allowedOrigins)
 4. Update versions in `Dockerfile` if needed
-5. Test deploy
-6. Commit + push
+5. Test deploy, then commit + push
 
 ## License
 
