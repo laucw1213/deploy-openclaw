@@ -115,6 +115,7 @@ Then tell user:
 > 3. Under Permissions, click **+ Add more** and add:
 >    - **Account → AI Gateway → Edit**
 >    - **Account → Workers R2 Storage → Edit**
+>    - **Account → Billing → Read**
 > 4. Under Account Resources: **Include → All accounts** (or select your account)
 > 5. Under Zone Resources: **Include → All zones**
 > 6. Leave Client IP and TTL as default (empty)
@@ -170,6 +171,44 @@ Parse all account IDs from the output (32-char hex strings). If multiple account
 ```bash
 GATEWAY_TOKEN=$(openssl rand -hex 32)
 ```
+
+### Verify account plan
+
+Check that the account has Workers Paid Plan (required for Containers):
+
+```bash
+node -e "
+const https = require('https');
+const opts = {
+  hostname: 'api.cloudflare.com',
+  path: '/client/v4/accounts/${ACCOUNT_ID}/subscriptions',
+  headers: { 'Authorization': 'Bearer ${CF_API_TOKEN}' }
+};
+https.get(opts, res => {
+  let d=''; res.on('data', c => d += c);
+  res.on('end', () => {
+    try {
+      const r = JSON.parse(d);
+      if (r.success && r.result) {
+        const workers = r.result.find(s => s.rate_plan?.public_name?.includes('Workers'));
+        if (workers && workers.state === 'Paid') {
+          console.log('Workers plan: ' + workers.rate_plan.public_name + ' (OK)');
+        } else {
+          console.log('NO_WORKERS_PLAN');
+        }
+      } else { console.log('CHECK_FAILED'); }
+    } catch(e) { console.log('CHECK_FAILED'); }
+  });
+});
+"
+```
+
+If output is `NO_WORKERS_PLAN`, tell user:
+
+> Your Cloudflare account does not have a Workers Paid Plan. This is required for Containers.
+> Please go to CF Dashboard → Workers & Pages → Plans → upgrade to Workers Paid ($5/month).
+
+If output is `CHECK_FAILED`, the API Token may not have Billing Read permission. You can skip this check and proceed — deployment will fail later if the plan is missing.
 
 Get workers subdomain:
 
