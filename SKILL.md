@@ -93,7 +93,34 @@ wrangler login
 
 Tell user: "A browser window will open. Please log in to your Cloudflare account and authorize wrangler."
 
-### 0.6 Telegram Bot Token
+### 0.6 Cloudflare API Token
+
+Check if user has a CF API Token stored:
+
+```bash
+echo $CLOUDFLARE_API_TOKEN
+```
+
+If empty, ask user:
+
+> I need a Cloudflare API Token to create resources automatically. This is a one-time setup:
+> 1. Go to https://dash.cloudflare.com/profile/api-tokens
+> 2. Click **Create Token**
+> 3. Use the **Edit Cloudflare Workers** template
+> 4. Under Permissions, add: **Account → AI Gateway → Edit**
+> 5. Under Permissions, add: **Account → R2 → Edit** (for R2 API Token creation, if the template does not include it, add it manually)
+> 6. Click **Continue to summary** → **Create Token**
+> 7. Copy the token and give it to me
+>
+> This token is reusable for all future deployments.
+
+Store as `{CF_API_TOKEN}`. Recommend user save it:
+
+```bash
+export CLOUDFLARE_API_TOKEN="{CF_API_TOKEN}"
+```
+
+### 0.7 Telegram Bot Token
 
 Ask user:
 
@@ -106,7 +133,7 @@ Ask user:
 
 Store as `{TELEGRAM_TOKEN}`.
 
-### 0.7 AI Model (optional)
+### 0.8 AI Model (optional)
 
 Ask user:
 
@@ -114,7 +141,7 @@ Ask user:
 
 Store as `{USER_MODEL}`.
 
-### 0.8 Instance name (optional)
+### 0.9 Instance name (optional)
 
 Ask user:
 
@@ -130,13 +157,33 @@ ACCOUNT_ID=$(wrangler whoami 2>&1 | grep -oE '[a-f0-9]{32}' | head -1)
 GATEWAY_TOKEN=$(openssl rand -hex 32)
 ```
 
-Computed values (no API calls needed):
+Get workers subdomain:
 
+```bash
+node -e "
+const https = require('https');
+const opts = {
+  hostname: 'api.cloudflare.com',
+  path: '/client/v4/accounts/${ACCOUNT_ID}/workers/subdomain',
+  headers: { 'Authorization': 'Bearer ${CF_API_TOKEN}' }
+};
+https.get(opts, res => {
+  let d=''; res.on('data', c => d += c);
+  res.on('end', () => { try { console.log(JSON.parse(d).result.subdomain); } catch(e) { console.log(''); } });
+});
+"
+```
+
+If subdomain is empty, ask user:
+
+> What is your Cloudflare Workers subdomain? Find it at: CF Dashboard → Workers & Pages → Overview (bottom shows `xxx.workers.dev`)
+
+Computed values:
+
+- `WORKER_URL` = `https://{NAME}.{SUBDOMAIN}.workers.dev`
 - `R2_BUCKET` = `{NAME}-data`
 - `GATEWAY_ID` = `{NAME}-gateway`
 - `MODEL_ID` = `workers-ai/{USER_MODEL}`
-
-Note: `WORKER_URL` will be obtained from the deploy output in Step 7. Do not set it yet.
 
 Save `GATEWAY_TOKEN` — user needs it to access the dashboard.
 
@@ -166,34 +213,77 @@ npm install
 
 ## Step 5: Create Cloudflare resources
 
-These use wrangler CLI only — no API tokens needed.
+All automated via CF API using `{CF_API_TOKEN}`.
 
 ```bash
-# Create R2 Bucket
+# 5a. Create R2 Bucket (wrangler CLI)
 CLOUDFLARE_ACCOUNT_ID=${ACCOUNT_ID} wrangler r2 bucket create {R2_BUCKET}
+
+# 5b. Create AI Gateway
+node -e "
+const https = require('https');
+const data = JSON.stringify({id:'{GATEWAY_ID}',name:'{GATEWAY_ID}'});
+const opts = {
+  hostname: 'api.cloudflare.com',
+  path: '/client/v4/accounts/${ACCOUNT_ID}/ai-gateway/gateways',
+  method: 'POST',
+  headers: { 'Authorization': 'Bearer ${CF_API_TOKEN}', 'Content-Type': 'application/json', 'Content-Length': data.length }
+};
+const req = https.request(opts, res => {
+  let d=''; res.on('data', c => d += c);
+  res.on('end', () => { const r = JSON.parse(d); console.log(r.success ? 'Created' : r.errors?.[0]?.message || 'Already exists'); });
+});
+req.write(data); req.end();
+"
+
+# 5c. Create AI Gateway Token
+node -e "
+const https = require('https');
+const data = JSON.stringify({name:'{NAME}-token'});
+const opts = {
+  hostname: 'api.cloudflare.com',
+  path: '/client/v4/accounts/${ACCOUNT_ID}/ai-gateway/gateways/{GATEWAY_ID}/tokens',
+  method: 'POST',
+  headers: { 'Authorization': 'Bearer ${CF_API_TOKEN}', 'Content-Type': 'application/json', 'Content-Length': data.length }
+};
+const req = https.request(opts, res => {
+  let d=''; res.on('data', c => d += c);
+  res.on('end', () => { try { const r = JSON.parse(d); console.log(r.result?.token || ''); } catch(e) { console.log(''); } });
+});
+req.write(data); req.end();
+"
 ```
 
-AI Gateway and tokens will be created manually by the user (see Step 6).
+Capture the AI Gateway Token output as `{AIG_TOKEN}`.
 
-Ask user to create these in CF Dashboard:
+If `{AIG_TOKEN}` is empty, ask user:
+> Could not auto-create AI Gateway Token. Please go to CF Dashboard → AI → AI Gateway → {GATEWAY_ID} → Create Token, then give me the token.
 
-> I need you to create a few things in the Cloudflare Dashboard:
->
-> **1. AI Gateway:**
-> Go to CF Dashboard → AI → AI Gateway → Create Gateway
-> - Name: `{GATEWAY_ID}`
-> - Then click on the gateway → Create Token → give me the token value
->
-> **2. R2 API Token (optional, for data persistence):**
-> Go to CF Dashboard → R2 → Manage R2 API Tokens → Create Account API Token
-> - Permission: Object Read & Write
-> - Bucket: `{R2_BUCKET}`
-> - Give me the Access Key ID and Secret Access Key
+```bash
+# 5d. Create R2 API Token
+node -e "
+const https = require('https');
+const data = JSON.stringify({name:'{NAME}-r2',permissions:['object-read-write'],buckets:['{R2_BUCKET}'],ttl:0});
+const opts = {
+  hostname: 'api.cloudflare.com',
+  path: '/client/v4/accounts/${ACCOUNT_ID}/r2/tokens',
+  method: 'POST',
+  headers: { 'Authorization': 'Bearer ${CF_API_TOKEN}', 'Content-Type': 'application/json', 'Content-Length': data.length }
+};
+const req = https.request(opts, res => {
+  let d=''; res.on('data', c => d += c);
+  res.on('end', () => { try { const r = JSON.parse(d); console.log(JSON.stringify({ak:r.result?.access_key_id||r.result?.accessKeyId||'',sk:r.result?.secret_access_key||r.result?.secretAccessKey||''})); } catch(e) { console.log('{}'); } });
+});
+req.write(data); req.end();
+"
+```
 
-Store AI Gateway Token as `{AIG_TOKEN}`.
-Store R2 keys as `{R2_ACCESS_KEY}` and `{R2_SECRET_KEY}` (empty if user skips).
+Parse the output JSON to get `{R2_ACCESS_KEY}` and `{R2_SECRET_KEY}`.
 
-## Step 6: Set secrets (except WORKER_URL)
+If empty, ask user:
+> Could not auto-create R2 API Token. Please go to CF Dashboard → R2 → Manage R2 API Tokens → Create Account API Token (Object Read & Write, bucket: {R2_BUCKET}), then give me the Access Key ID and Secret Access Key.
+
+## Step 6: Set secrets
 
 Run each from `{WORK_DIR}`. If `wrangler secret put` fails, use `wrangler versions secret put` as fallback.
 
@@ -206,64 +296,44 @@ echo "{GATEWAY_ID}" | wrangler secret put CF_AI_GATEWAY_GATEWAY_ID
 echo "{MODEL_ID}" | wrangler secret put CF_AI_GATEWAY_MODEL
 echo "${GATEWAY_TOKEN}" | wrangler secret put MOLTBOT_GATEWAY_TOKEN
 echo "{TELEGRAM_TOKEN}" | wrangler secret put TELEGRAM_BOT_TOKEN
+echo "{WORKER_URL}" | wrangler secret put WORKER_URL
 echo "true" | wrangler secret put DEV_MODE
 echo "true" | wrangler secret put DEBUG_ROUTES
 echo "${ACCOUNT_ID}" | wrangler secret put CF_ACCOUNT_ID
 ```
 
-If user provided R2 keys:
+If R2 keys available:
 
 ```bash
 echo "{R2_ACCESS_KEY}" | wrangler secret put R2_ACCESS_KEY_ID
 echo "{R2_SECRET_KEY}" | wrangler secret put R2_SECRET_ACCESS_KEY
 ```
 
-Note: WORKER_URL is NOT set yet — we get it from deploy output next.
-
-## Step 7: Deploy and get WORKER_URL
+## Step 7: Deploy
 
 ```bash
 cd {WORK_DIR}
-npm run deploy 2>&1 | tee /tmp/deploy-output.txt
+npm run deploy
 ```
 
-Takes 3-5 minutes on first run. Ensure Docker is running.
-
-Parse the Worker URL from deploy output. Look for a line like:
-
-```
-  https://mc-dev.masterconcept-hongkong.workers.dev
-```
-
-Extract it:
-
-```bash
-WORKER_URL=$(grep -oE 'https://[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev' /tmp/deploy-output.txt | head -1)
-```
-
-Now set the WORKER_URL secret:
-
-```bash
-cd {WORK_DIR}
-echo "${WORKER_URL}" | wrangler versions secret put WORKER_URL
-```
+Takes 3-5 minutes on first run (Docker build + push + deploy). Ensure Docker is running.
 
 ## Step 8: Set Telegram webhook
 
 ```bash
-curl -s "https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook?url=${WORKER_URL}/telegram"
+curl -s "https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook?url={WORKER_URL}/telegram"
 ```
 
 ## Step 9: Wait for container and pair Telegram
 
 1. Trigger container:
 ```bash
-curl -s --max-time 10 "${WORKER_URL}/" > /dev/null
+curl -s --max-time 10 "{WORKER_URL}/" > /dev/null
 ```
 
 2. Wait 1-3 minutes. Poll every 15 seconds:
 ```bash
-curl -s --max-time 10 "${WORKER_URL}/debug/gateway-api?path=/health"
+curl -s --max-time 10 "{WORKER_URL}/debug/gateway-api?path=/health"
 ```
 Ready when response does NOT contain "not listening".
 
@@ -272,12 +342,12 @@ Ready when response does NOT contain "not listening".
 
 4. Poll for pairing code (every 10 seconds, up to 3 minutes):
 ```bash
-curl -s --max-time 10 "${WORKER_URL}/debug/cli?cmd=cat+/root/.openclaw/devices/pending.json"
+curl -s --max-time 10 "{WORKER_URL}/debug/cli?cmd=cat+/root/.openclaw/devices/pending.json"
 ```
 
 5. When code appears, approve:
 ```bash
-curl -s --max-time 15 "${WORKER_URL}/debug/cli?cmd=openclaw+pairing+approve+telegram+{CODE}"
+curl -s --max-time 15 "{WORKER_URL}/debug/cli?cmd=openclaw+pairing+approve+telegram+{CODE}"
 ```
 
 6. Confirm to user:
@@ -286,7 +356,7 @@ curl -s --max-time 15 "${WORKER_URL}/debug/cli?cmd=openclaw+pairing+approve+tele
 If pairing times out:
 > 1. Send "hi" to your bot in Telegram
 > 2. Copy the pairing code from the bot's reply
-> 3. Open: `${WORKER_URL}/debug/cli?cmd=openclaw+pairing+approve+telegram+CODE`
+> 3. Open: `{WORKER_URL}/debug/cli?cmd=openclaw+pairing+approve+telegram+CODE`
 
 ## Final output
 
@@ -308,7 +378,7 @@ Save the Gateway Token — you need it to access the Dashboard.
 - Container not starting → `curl -s "{WORKER_URL}/debug/processes?logs=true"`
 - Check secrets → `curl -s "{WORKER_URL}/debug/env"`
 - View config → `curl -s "{WORKER_URL}/debug/container-config"`
-- "origin not allowed" → WORKER_URL secret not set, run: `echo "URL" | wrangler versions secret put WORKER_URL`
+- "origin not allowed" → WORKER_URL secret not set correctly
 - Telegram no response → `curl -s "https://api.telegram.org/bot{TELEGRAM_TOKEN}/getWebhookInfo"`
 - "openclaw requires Node >= X" → Dockerfile Node version too old
 - Onboard hangs → ANTHROPIC_API_KEY secret not set
