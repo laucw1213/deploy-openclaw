@@ -345,25 +345,17 @@ curl -s --max-time 10 "{WORKER_URL}/debug/gateway-api?path=/health"
 Ready when response does NOT contain "not listening".
 
 3. Tell user:
-> Your bot is starting up. Send **"hi"** to your bot in Telegram now.
+> Your bot is ready! Send **"hi"** to your bot in Telegram now.
+> The bot will reply with a pairing code (like `H2YPBRTM`).
+> Give me the pairing code.
 
-4. Poll for pairing code (every 10 seconds, up to 3 minutes):
-```bash
-curl -s --max-time 10 "{WORKER_URL}/debug/cli?cmd=cat+/root/.openclaw/devices/pending.json"
-```
-
-5. When code appears, approve:
+4. When user provides the code, approve it:
 ```bash
 curl -s --max-time 15 "{WORKER_URL}/debug/cli?cmd=openclaw+pairing+approve+telegram+{CODE}"
 ```
 
-6. Confirm to user:
+5. Confirm to user:
 > Pairing complete! Your bot is ready. Try sending a message.
-
-If pairing times out:
-> 1. Send "hi" to your bot in Telegram
-> 2. Copy the pairing code from the bot's reply
-> 3. Open: `{WORKER_URL}/debug/cli?cmd=openclaw+pairing+approve+telegram+CODE`
 
 ## Final output
 
