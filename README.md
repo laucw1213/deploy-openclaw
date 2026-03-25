@@ -38,7 +38,7 @@ The AI reads `SKILL.md` and follows 10 steps:
 | Step | What happens | Who does it |
 |------|-------------|-------------|
 | 0 | Check & install prerequisites | AI (auto-fix) |
-| 1 | Get Cloudflare account info | AI |
+| 1 | Get account info + verify plan | AI |
 | 2 | Copy source code | AI |
 | 3 | Modify config (2 sed commands) | AI |
 | 4 | Install dependencies | AI |
@@ -63,7 +63,8 @@ flowchart TD
     S0U1["Step 0.6 🔑 Create CF API Token<br/>(one-time setup)"]:::user --> S0A1["Step 0.1-0.4 Install tools<br/>brew, node, wrangler, docker"]:::auto
     S0U2["Step 0.7 🤖 Create Telegram Bot<br/>via BotFather"]:::user --> S1["Step 1 Get Account ID + Subdomain"]:::auto
     S0A1 --> S1
-    S1 --> S2["Step 2 Copy source code"]:::auto
+    S1 --> S1V["Step 1 Verify Workers Paid Plan"]:::auto
+    S1V --> S2["Step 2 Copy source code"]:::auto
     S2 --> S3["Step 3 Modify files<br/>2 sed commands"]:::auto
     S3 --> S4["Step 4 Install dependencies<br/>npm install"]:::auto
     S4 --> S5AB["Step 5a-b Create R2 Bucket + AI Gateway"]:::auto
