@@ -111,11 +111,15 @@ Then tell user:
 
 > I've opened the Cloudflare API Token page. Please:
 > 1. Click **Create Token**
-> 2. Use the **Edit Cloudflare Workers** template
-> 3. Under Permissions, add: **Account → AI Gateway → Edit**
-> 4. Under Permissions, add: **Account → R2 → Edit**
-> 5. Click **Continue to summary** → **Create Token**
-> 6. Copy the token and give it to me
+> 2. Use the **Edit Cloudflare Workers** template → click **Use template**
+> 3. Under Permissions, click **+ Add more** and add:
+>    - **Account → AI Gateway → Edit**
+>    - **Account → Workers R2 Storage → Edit**
+> 4. Under Account Resources: **Include → All accounts** (or select your account)
+> 5. Under Zone Resources: **Include → All zones**
+> 6. Leave Client IP and TTL as default (empty)
+> 7. Click **Continue to summary** → **Create Token**
+> 8. Copy the token and give it to me
 >
 > This token is reusable for all future deployments.
 
