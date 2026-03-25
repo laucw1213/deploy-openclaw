@@ -359,18 +359,33 @@ curl -s --max-time 15 "{WORKER_URL}/debug/cli?cmd=openclaw+pairing+approve+teleg
 
 ## Final output
 
-Tell user:
+Open the Dashboard for the user:
 
+```bash
+open "{WORKER_URL}/?token={GATEWAY_TOKEN}"
 ```
-✅ OpenClaw Bot deployed!
 
-Worker URL:    {WORKER_URL}
-Dashboard:     {WORKER_URL}/?token={GATEWAY_TOKEN}
-Admin Panel:   {WORKER_URL}/_admin/
-Gateway Token: {GATEWAY_TOKEN}
+Then tell user:
 
-Save the Gateway Token — you need it to access the Dashboard.
-```
+> ✅ **OpenClaw Bot deployed!**
+>
+> I've opened the Dashboard for you. Here are your URLs:
+>
+> **Dashboard** (with auto-login):
+> `{WORKER_URL}/?token={GATEWAY_TOKEN}`
+>
+> **Admin Panel** (container status, R2 backup, paired devices):
+> `{WORKER_URL}/_admin/`
+>
+> **Gateway Token** (save this — needed to connect to Dashboard):
+> `{GATEWAY_TOKEN}`
+>
+> **How to connect to Dashboard manually:**
+> 1. Open `{WORKER_URL}/`
+> 2. Paste the Gateway Token into the "網關令牌" field
+> 3. Click "連接"
+>
+> Your Telegram bot is ready — send it a message to start chatting!
 
 ## Troubleshooting
 
