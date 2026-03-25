@@ -28,23 +28,24 @@ That's it. The AI installs everything else (Node.js, Docker, wrangler CLI).
 
 ```mermaid
 flowchart TD
-    U1["🔑 Create CF API Token<br/>(one-time setup)"]:::user --> A1["Install tools<br/>brew, node, wrangler, docker"]:::auto
-    U2["🤖 Create Telegram Bot<br/>via BotFather"]:::user --> A2["Get Account ID + Subdomain"]:::auto
-    A1 --> A2
-    A2 --> A3["Prepare source code"]:::auto
-    A3 --> A4["Install dependencies"]:::auto
-    A4 --> A5["Create R2 Bucket + AI Gateway"]:::auto
-    A5 --> U3["🔑 Create AI Gateway Token<br/>in Dashboard"]:::user
-    U3 --> U4["🔑 Create R2 Token<br/>in Dashboard (optional)"]:::user
-    U4 --> A6["Configure 14 secrets"]:::auto
-    A6 --> A7["Build + Deploy<br/>3-5 minutes"]:::auto
-    A7 --> A8["Set up Telegram webhook"]:::auto
-    A8 --> A9["Start container"]:::auto
-    A9 --> U5["💬 Send 'hi' to bot<br/>share pairing code"]:::user
-    U5 --> A10["Approve Telegram pairing"]:::auto
-    A10 --> A11["Open Dashboard + Admin"]:::auto
-    A11 --> U6["✅ Click Approve<br/>in Admin panel"]:::user
-    U6 --> Done["🎉 Your bot is live!"]:::done
+    S0U1["Step 0.6 🔑 Create CF API Token<br/>(one-time setup)"]:::user --> S0A1["Step 0.1-0.4 Install tools<br/>brew, node, wrangler, docker"]:::auto
+    S0U2["Step 0.7 🤖 Create Telegram Bot<br/>via BotFather"]:::user --> S1["Step 1 Get Account ID + Subdomain"]:::auto
+    S0A1 --> S1
+    S1 --> S2["Step 2 Copy source code"]:::auto
+    S2 --> S3["Step 3 Modify files<br/>2 sed commands"]:::auto
+    S3 --> S4["Step 4 Install dependencies<br/>npm install"]:::auto
+    S4 --> S5AB["Step 5a-b Create R2 Bucket + AI Gateway"]:::auto
+    S5AB --> S5C["Step 5c 🔑 Create AI Gateway Token<br/>in Dashboard"]:::user
+    S5C --> S5D["Step 5d 🔑 Create R2 Token<br/>in Dashboard (optional)"]:::user
+    S5D --> S6["Step 6 Configure 14 secrets"]:::auto
+    S6 --> S7["Step 7 Build + Deploy<br/>3-5 minutes"]:::auto
+    S7 --> S8["Step 8 Set Telegram webhook"]:::auto
+    S8 --> S9W["Step 9 Wait for container<br/>1-3 minutes"]:::auto
+    S9W --> S9U["Step 9 💬 Send 'hi' to bot<br/>share pairing code"]:::user
+    S9U --> S9A["Step 9 Approve Telegram pairing"]:::auto
+    S9A --> SF["Final ✅ Open Dashboard + Admin"]:::auto
+    SF --> SFU["Final ✅ Click Approve<br/>in Admin panel"]:::user
+    SFU --> Done["🎉 Your bot is live!"]:::done
 
     classDef user fill:#ffcdd2,stroke:#c62828,color:#000
     classDef auto fill:#c8e6c9,stroke:#2e7d32,color:#000
