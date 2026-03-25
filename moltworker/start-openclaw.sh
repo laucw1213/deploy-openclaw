@@ -166,9 +166,13 @@ if (process.env.OPENCLAW_GATEWAY_TOKEN) {
 
 config.gateway.controlUi = config.gateway.controlUi || {};
 config.gateway.controlUi.allowInsecureAuth = true;
-const origins = config.gateway.controlUi.allowedOrigins || [];
-origins.push('https://moltbot-sandbox.masterconcept-hongkong.workers.dev');
-config.gateway.controlUi.allowedOrigins = [...new Set(origins)];
+if (process.env.WORKER_URL) {
+    const origins = config.gateway.controlUi.allowedOrigins || [];
+    if (!origins.includes(process.env.WORKER_URL)) {
+        origins.push(process.env.WORKER_URL);
+    }
+    config.gateway.controlUi.allowedOrigins = origins;
+}
 
 // Legacy AI Gateway base URL override:
 // ANTHROPIC_BASE_URL is picked up natively by the Anthropic SDK,

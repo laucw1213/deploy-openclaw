@@ -9,7 +9,7 @@ You are deploying an OpenClaw AI Bot on Cloudflare. Follow every step in order. 
 
 ## Step 0: Prerequisites check and auto-fix
 
-Check each tool. If missing, install it. Run checks sequentially — later tools depend on earlier ones.
+Check each tool. If missing, install it. Run checks sequentially.
 
 ### 0.1 Homebrew
 
@@ -23,7 +23,7 @@ If not found:
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
-After install, ensure brew is in PATH. On Apple Silicon:
+On Apple Silicon, also run:
 
 ```bash
 eval "$(/opt/homebrew/bin/brew shellenv)"
@@ -65,19 +65,19 @@ If not found:
 brew install --cask docker
 ```
 
-Then check if Docker daemon is running:
+Then check daemon:
 
 ```bash
 docker ps 2>&1
 ```
 
-If it shows "Cannot connect" or "no such file", start Docker:
+If "Cannot connect" or "no such file", start Docker:
 
 ```bash
 open -a Docker
 ```
 
-Wait up to 60 seconds for Docker daemon to be ready. Check by retrying `docker ps` every 5 seconds.
+Wait up to 60 seconds, retrying `docker ps` every 5 seconds until it works.
 
 ### 0.5 wrangler login
 
@@ -85,65 +85,71 @@ Wait up to 60 seconds for Docker daemon to be ready. Check by retrying `docker p
 wrangler whoami 2>&1
 ```
 
-If it shows error or "not logged in":
+If not logged in:
 
 ```bash
 wrangler login
 ```
 
-This opens a browser. Tell the user: "A browser window will open. Please log in to your Cloudflare account and authorize wrangler."
-
-Wait for the command to complete.
+Tell user: "A browser window will open. Please log in to your Cloudflare account and authorize wrangler."
 
 ### 0.6 Telegram Bot Token
 
-Ask the user:
+Ask user:
 
-> Do you already have a Telegram Bot Token? If not, follow these steps:
-> 1. Open Telegram and search for **@BotFather**
+> Do you already have a Telegram Bot Token? If not:
+> 1. Open Telegram → search **@BotFather**
 > 2. Send `/newbot`
-> 3. Follow the prompts to name your bot
-> 4. BotFather will give you a token like `8622764702:AAGkF1CqHHrVWfpwmAP4O22BlKpZXJiVRv8`
-> 5. Give me that token
+> 3. Follow prompts to name your bot
+> 4. Copy the token (like `8622764702:AAGk...`)
+> 5. Give me the token
 
-Store the token as `{TELEGRAM_TOKEN}`.
+Store as `{TELEGRAM_TOKEN}`.
 
 ### 0.7 AI Model (optional)
 
-Ask the user:
+Ask user:
 
-> Which AI model do you want to use? (Press Enter for default)
-> Default: `@cf/nvidia/nemotron-3-120b-a12b`
+> Which AI model? (Enter for default: `@cf/nvidia/nemotron-3-120b-a12b`)
 
-Store as `{USER_MODEL}`. Default: `@cf/nvidia/nemotron-3-120b-a12b`.
+Store as `{USER_MODEL}`.
 
 ### 0.8 Instance name (optional)
 
-Ask the user:
+Ask user:
 
-> What name for this bot instance? (Press Enter for default)
-> Default: `openclaw`
+> Name for this bot? (Enter for default: `openclaw`)
+> Note: only lowercase letters, numbers, and hyphens. No underscores.
 
-Store as `{NAME}`. Default: `openclaw`. This affects Worker name, R2 bucket, and gateway name.
+Store as `{NAME}`.
 
 ## Step 1: Derive variables
 
 ```bash
 ACCOUNT_ID=$(wrangler whoami 2>&1 | grep -oE '[a-f0-9]{32}' | head -1)
 OAUTH_TOKEN=$(wrangler oauth-token 2>/dev/null)
-SUBDOMAIN=$(curl -s "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/subdomain" \
-  -H "Authorization: Bearer ${OAUTH_TOKEN}" | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log(d.result?.subdomain||'')")
 GATEWAY_TOKEN=$(openssl rand -hex 32)
 ```
 
+Get workers subdomain from CF Dashboard or:
+
+```bash
+curl -s --max-time 10 "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/subdomain" \
+  -H "Authorization: Bearer ${OAUTH_TOKEN}" | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log(d.result?.subdomain||'')"
+```
+
+If subdomain cannot be obtained via API, ask the user:
+
+> What is your Cloudflare Workers subdomain? You can find it at: CF Dashboard → Workers & Pages → Overview (bottom of page shows `xxx.workers.dev`)
+
 Computed values:
 
-- `WORKER_URL` = `https://{NAME}.${SUBDOMAIN}.workers.dev`
+- `WORKER_URL` = `https://{NAME}.{SUBDOMAIN}.workers.dev`
 - `R2_BUCKET` = `{NAME}-data`
 - `GATEWAY_ID` = `{NAME}-gateway`
 - `MODEL_ID` = `workers-ai/{USER_MODEL}`
 
-Save `GATEWAY_TOKEN` — user needs it to access the dashboard later.
+Save `GATEWAY_TOKEN` — user needs it to access the dashboard.
 
 ## Step 2: Prepare source code
 
@@ -152,69 +158,19 @@ cp -r {SKILL_DIR}/moltworker {WORK_DIR}
 cd {WORK_DIR}
 ```
 
-`{SKILL_DIR}` is the directory containing this SKILL.md. `{WORK_DIR}` is where to deploy from (e.g. current working directory + `{NAME}`).
-
 ## Step 3: Modify files
 
-### Dockerfile — 2 edits
-
-Find `ENV NODE_VERSION=22.13.1` → replace with `ENV NODE_VERSION=22.16.0`
-Find `openclaw@2026.2.3` → replace with `openclaw@2026.3.13`
-
-### wrangler.jsonc — 3 edits
-
-Find `"name": "moltbot-sandbox"` → replace with `"name": "{NAME}"`
-Find `"bucket_name": "moltbot-data"` → replace with `"bucket_name": "{R2_BUCKET}"`
-Find `"instance_type": "standard-1"` → replace with `"instance_type": "standard-2"`
-
-### start-openclaw.sh — 2 edits
-
-**Edit 1: Reorder auth block.** Find the AUTH_ARGS if/elif/fi block that starts with:
+Only 2 sed commands needed. Everything else is handled by Wrangler Secrets at runtime.
 
 ```bash
-    AUTH_ARGS=""
-    if [ -n "$CLOUDFLARE_AI_GATEWAY_API_KEY" ]
+cd {WORK_DIR}
+sed -i '' 's/moltbot-sandbox/{NAME}/g' wrangler.jsonc
+sed -i '' 's/moltbot-data/{NAME}-data/g' wrangler.jsonc
 ```
 
-Replace the entire AUTH_ARGS="" through fi with:
-
-```bash
-    AUTH_ARGS=""
-    if [ -n "$ANTHROPIC_API_KEY" ]; then
-        AUTH_ARGS="--auth-choice apiKey --anthropic-api-key $ANTHROPIC_API_KEY"
-    elif [ -n "$CLOUDFLARE_AI_GATEWAY_API_KEY" ] && [ -n "$CF_AI_GATEWAY_ACCOUNT_ID" ] && [ -n "$CF_AI_GATEWAY_GATEWAY_ID" ]; then
-        AUTH_ARGS="--auth-choice cloudflare-ai-gateway-api-key \
-            --cloudflare-ai-gateway-account-id $CF_AI_GATEWAY_ACCOUNT_ID \
-            --cloudflare-ai-gateway-gateway-id $CF_AI_GATEWAY_GATEWAY_ID \
-            --cloudflare-ai-gateway-api-key $CLOUDFLARE_AI_GATEWAY_API_KEY"
-    elif [ -n "$OPENAI_API_KEY" ]; then
-        AUTH_ARGS="--auth-choice openai-api-key --openai-api-key $OPENAI_API_KEY"
-    fi
-```
-
-**Edit 2: Add allowedOrigins.** Find this block:
-
-```javascript
-if (process.env.OPENCLAW_DEV_MODE === 'true') {
-    config.gateway.controlUi = config.gateway.controlUi || {};
-    config.gateway.controlUi.allowInsecureAuth = true;
-}
-```
-
-Replace with:
-
-```javascript
-config.gateway.controlUi = config.gateway.controlUi || {};
-config.gateway.controlUi.allowInsecureAuth = true;
-const existingOrigins = config.gateway.controlUi.allowedOrigins || [];
-const workerUrl = process.env.WORKER_URL;
-if (workerUrl && !existingOrigins.includes(workerUrl)) {
-    existingOrigins.push(workerUrl);
-}
-config.gateway.controlUi.allowedOrigins = existingOrigins.length > 0
-    ? existingOrigins
-    : ['{WORKER_URL}'];
-```
+No other file changes needed:
+- Dockerfile: already has correct Node.js + OpenClaw versions
+- start-openclaw.sh: auth order already correct, allowedOrigins reads from WORKER_URL env var
 
 ## Step 4: Install dependencies
 
@@ -225,7 +181,7 @@ npm install
 
 ## Step 5: Create Cloudflare resources
 
-Run each command. Ignore errors if resource already exists.
+Run each. Ignore errors if resource already exists.
 
 ```bash
 # Create AI Gateway
@@ -253,15 +209,15 @@ R2_ACCESS_KEY=$(echo "$R2_TOKEN_RESP" | node -e "const d=JSON.parse(require('fs'
 R2_SECRET_KEY=$(echo "$R2_TOKEN_RESP" | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log(d.result?.secret_access_key||d.result?.secretAccessKey||'')")
 ```
 
-If `AIG_TOKEN` is empty, tell the user:
+If `AIG_TOKEN` is empty, ask user:
 > I couldn't auto-create the AI Gateway Token. Please go to CF Dashboard → AI → AI Gateway → {GATEWAY_ID} → Create Token, then give me the token value.
 
-If `R2_ACCESS_KEY` is empty, tell the user:
+If `R2_ACCESS_KEY` is empty, ask user:
 > I couldn't auto-create the R2 API Token. Please go to CF Dashboard → R2 → Manage R2 API Tokens → Create Account API Token (Object Read & Write, bucket: {R2_BUCKET}), then give me the Access Key ID and Secret Access Key.
 
 ## Step 6: Set secrets
 
-Run each command from `{WORK_DIR}`. If `wrangler secret put` fails, use `wrangler versions secret put` as fallback.
+Run each from `{WORK_DIR}`. If `wrangler secret put` fails, use `wrangler versions secret put` as fallback.
 
 ```bash
 cd {WORK_DIR}
@@ -287,7 +243,7 @@ cd {WORK_DIR}
 npm run deploy
 ```
 
-This takes 3-5 minutes on first run (Docker build + push + deploy). Ensure Docker is running.
+Takes 3-5 minutes on first run (Docker build + push + deploy). Ensure Docker is running.
 
 ## Step 8: Set Telegram webhook
 
@@ -297,26 +253,26 @@ curl -s "https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook?url={WORKER_URL
 
 ## Step 9: Wait for container and pair Telegram
 
-1. Trigger container start:
+1. Trigger container:
 ```bash
 curl -s --max-time 10 "{WORKER_URL}/" > /dev/null
 ```
 
-2. Wait 1-3 minutes for cold start. Poll every 15 seconds:
+2. Wait 1-3 minutes. Poll every 15 seconds:
 ```bash
 curl -s --max-time 10 "{WORKER_URL}/debug/gateway-api?path=/health"
 ```
 Ready when response does NOT contain "not listening".
 
-3. Tell the user:
+3. Tell user:
 > Your bot is starting up. Send **"hi"** to your bot in Telegram now.
 
-4. Poll for pending pairing code (every 10 seconds, up to 3 minutes):
+4. Poll for pairing code (every 10 seconds, up to 3 minutes):
 ```bash
 curl -s --max-time 10 "{WORKER_URL}/debug/cli?cmd=cat+/root/.openclaw/devices/pending.json"
 ```
 
-5. When a code appears in the JSON output, approve it:
+5. When code appears, approve:
 ```bash
 curl -s --max-time 15 "{WORKER_URL}/debug/cli?cmd=openclaw+pairing+approve+telegram+{CODE}"
 ```
@@ -324,17 +280,17 @@ curl -s --max-time 15 "{WORKER_URL}/debug/cli?cmd=openclaw+pairing+approve+teleg
 6. Confirm to user:
 > Pairing complete! Your bot is ready. Try sending a message.
 
-If pairing times out, give the user manual instructions:
+If pairing times out:
 > 1. Send "hi" to your bot in Telegram
 > 2. Copy the pairing code from the bot's reply
 > 3. Open: `{WORKER_URL}/debug/cli?cmd=openclaw+pairing+approve+telegram+CODE`
 
 ## Final output
 
-Tell the user:
+Tell user:
 
 ```
-✅ OpenClaw Bot deployed successfully!
+✅ OpenClaw Bot deployed!
 
 Worker URL:    {WORKER_URL}
 Dashboard:     {WORKER_URL}/?token={GATEWAY_TOKEN}
@@ -342,18 +298,15 @@ Admin Panel:   {WORKER_URL}/_admin/
 Gateway Token: {GATEWAY_TOKEN}
 
 Save the Gateway Token — you need it to access the Dashboard.
-Send messages to your Telegram bot to start chatting!
 ```
 
 ## Troubleshooting
 
-If anything goes wrong during or after deployment:
-
 - Container not starting → `curl -s "{WORKER_URL}/debug/processes?logs=true"`
-- Check which secrets are set → `curl -s "{WORKER_URL}/debug/env"`
-- View OpenClaw config → `curl -s "{WORKER_URL}/debug/container-config"`
-- "origin not allowed" on Dashboard → allowedOrigins patch failed in start-openclaw.sh
+- Check secrets → `curl -s "{WORKER_URL}/debug/env"`
+- View config → `curl -s "{WORKER_URL}/debug/container-config"`
+- "origin not allowed" → WORKER_URL secret not set correctly
 - Telegram no response → `curl -s "https://api.telegram.org/bot{TELEGRAM_TOKEN}/getWebhookInfo"`
-- "openclaw requires Node >= X" → Node version in Dockerfile too old
-- Onboard hangs on startup → ANTHROPIC_API_KEY secret not set
-- `wrangler secret put` fails → use `wrangler versions secret put` then redeploy with `npm run deploy`
+- "openclaw requires Node >= X" → Dockerfile Node version too old
+- Onboard hangs → ANTHROPIC_API_KEY secret not set
+- `wrangler secret put` fails → use `wrangler versions secret put` then `npm run deploy`
