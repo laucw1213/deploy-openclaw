@@ -268,40 +268,26 @@ Tell user:
 
 Store as `{AIG_TOKEN}`.
 
-### 5d. Create R2 API Token (auto)
+### 5d. Create R2 API Token (optional, manual — no API available)
 
-```bash
-node -e "
-const https = require('https');
-const data = JSON.stringify({name:'{NAME}-r2',permissions:['object-read-write'],buckets:['{R2_BUCKET}'],ttl:0});
-const opts = {
-  hostname: 'api.cloudflare.com',
-  path: '/client/v4/accounts/${ACCOUNT_ID}/r2/tokens',
-  method: 'POST',
-  headers: { 'Authorization': 'Bearer ${CF_API_TOKEN}', 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
-};
-const req = https.request(opts, res => {
-  let d=''; res.on('data', c => d += c);
-  res.on('end', () => { try { const r = JSON.parse(d); console.log(JSON.stringify({ak:r.result?.access_key_id||r.result?.accessKeyId||'',sk:r.result?.secret_access_key||r.result?.secretAccessKey||''})); } catch(e) { console.log('{}'); } });
-});
-req.write(data); req.end();
-"
-```
-
-Parse the output JSON to get `{R2_ACCESS_KEY}` and `{R2_SECRET_KEY}`.
-
-If empty, open R2 token page for user:
+Open R2 token page for user:
 
 ```bash
 open "https://dash.cloudflare.com/${ACCOUNT_ID}/r2/api-tokens"
 ```
 
 Tell user:
-> I've opened the R2 API Token page. Please:
+
+> I've opened the R2 API Token page. This is optional but recommended (keeps data across container restarts). Please:
 > 1. Click **Create Account API Token**
-> 2. Permission: **Object Read & Write**
-> 3. Bucket: **{R2_BUCKET}**
-> 4. Click **Create** and give me the Access Key ID and Secret Access Key
+> 2. Token name: `{NAME}-r2`
+> 3. Permission: **Object Read & Write**
+> 4. Select **Apply to specific buckets only** → choose `{R2_BUCKET}`
+> 5. TTL: **Forever**
+> 6. Click **Create Account API Token**
+> 7. Give me the **Access Key ID** and **Secret Access Key**
+>
+> Or type "skip" to skip R2 persistence.
 
 ## Step 6: Set secrets
 
