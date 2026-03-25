@@ -101,16 +101,21 @@ Check if user has a CF API Token stored:
 echo $CLOUDFLARE_API_TOKEN
 ```
 
-If empty, ask user:
+If empty, open the token creation page for the user:
 
-> I need a Cloudflare API Token to create resources automatically. This is a one-time setup:
-> 1. Go to https://dash.cloudflare.com/profile/api-tokens
-> 2. Click **Create Token**
-> 3. Use the **Edit Cloudflare Workers** template
-> 4. Under Permissions, add: **Account → AI Gateway → Edit**
-> 5. Under Permissions, add: **Account → R2 → Edit** (for R2 API Token creation, if the template does not include it, add it manually)
-> 6. Click **Continue to summary** → **Create Token**
-> 7. Copy the token and give it to me
+```bash
+open "https://dash.cloudflare.com/profile/api-tokens"
+```
+
+Then tell user:
+
+> I've opened the Cloudflare API Token page. Please:
+> 1. Click **Create Token**
+> 2. Use the **Edit Cloudflare Workers** template
+> 3. Under Permissions, add: **Account → AI Gateway → Edit**
+> 4. Under Permissions, add: **Account → R2 → Edit**
+> 5. Click **Continue to summary** → **Create Token**
+> 6. Copy the token and give it to me
 >
 > This token is reusable for all future deployments.
 
