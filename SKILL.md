@@ -260,8 +260,11 @@ Tell user:
 
 > I've opened the AI Gateway page. Please:
 > 1. Click **Settings** tab
-> 2. Find **Authentication** → click **Create Token**
-> 3. Copy the token and give it to me
+> 2. Find **Authenticated Gateway** section → click **Create authentication token**
+> 3. Token name: enter `{NAME}`
+> 4. Keep defaults (Permission: AI Gateway → Run, Account: your account)
+> 5. Click **Create Token**
+> 6. Copy the token and give it to me
 
 Store as `{AIG_TOKEN}`.
 
