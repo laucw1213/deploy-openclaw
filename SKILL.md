@@ -362,7 +362,7 @@ curl -s --max-time 15 "{WORKER_URL}/debug/cli?cmd=openclaw+pairing+approve+teleg
 Open both pages for the user:
 
 ```bash
-open "{WORKER_URL}/?token={GATEWAY_TOKEN}"
+open "{WORKER_URL}/"
 open "{WORKER_URL}/_admin/"
 ```
 
@@ -370,25 +370,25 @@ Then tell user:
 
 > ✅ **OpenClaw Bot deployed!**
 >
-> I've opened two pages for you:
+> I've opened two pages for you. Follow these steps to connect:
 >
-> **1. Admin Panel** — Go here first to approve the Dashboard connection:
-> `{WORKER_URL}/_admin/`
-> Click **"Approve All"** or **"Approve"** on the pending pairing request.
+> **Step 1.** Go to the **Dashboard** page (`{WORKER_URL}/`)
+> - Paste this Gateway Token into the "網關令牌" field:
+>   `{GATEWAY_TOKEN}`
+> - Click **"連接"**
+> - It will show "Pairing required" — this is normal
 >
-> **2. Dashboard** — After approving, this page will connect:
-> `{WORKER_URL}/?token={GATEWAY_TOKEN}`
+> **Step 2.** Go to the **Admin Panel** page (`{WORKER_URL}/_admin/`)
+> - You will see a **Pending Pairing Request**
+> - Click **"Approve"** (or **"Approve All"**)
 >
-> **Gateway Token** (save this — needed to reconnect to Dashboard):
+> **Step 3.** Go back to the **Dashboard** page
+> - It should now be connected!
+>
+> **Save this Gateway Token for later:**
 > `{GATEWAY_TOKEN}`
 >
-> **To connect to Dashboard later:**
-> 1. Open `{WORKER_URL}/`
-> 2. Paste the Gateway Token into the "網關令牌" field
-> 3. Click "連接"
-> 4. If it shows "Pairing required", go to `{WORKER_URL}/_admin/` and approve
->
-> Your Telegram bot is ready — send it a message to start chatting!
+> Your Telegram bot is also ready — send it a message to start chatting!
 
 ## Troubleshooting
 
