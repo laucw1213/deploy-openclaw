@@ -57,28 +57,66 @@ flowchart TD
 | 🔴 **You do** | 6 steps | Create tokens, send "hi", click Approve |
 | 🟢 **AI does** | 11 steps | Install, build, deploy, configure |
 
-## What gets created
+## Architecture
 
-```
-Telegram / Web Dashboard
-        ↓
-┌─────────────────────────┐
-│  Worker (Moltworker)    │  ← Cloudflare Workers
-│  Routing + Auth         │
-└───────────┬─────────────┘
-            ↓
-┌─────────────────────────┐
-│  Container (OpenClaw)   │  ← Cloudflare Containers
-│  AI Agent + Tools       │
-└───────────┬─────────────┘
-            ↓
-┌─────────────────────────┐
-│  AI Gateway             │  ← Cloudflare AI Gateway
-│  Logging + Protection   │
-└───────────┬─────────────┘
-            ↓
-      Workers AI Model
-   (nemotron-3-120b-a12b)
+```mermaid
+flowchart TD
+    subgraph Users["👤 Users"]
+        TG["📱 Telegram"]
+        WEB["🌐 Web Dashboard"]
+    end
+
+    subgraph CF["☁️ Cloudflare Global Network"]
+        subgraph Worker["Worker (Moltworker)"]
+            AUTH["Auth + Token check"]
+            PROXY["Request proxy"]
+            LIFECYCLE["Container lifecycle"]
+        end
+
+        subgraph Container["Container (OpenClaw)"]
+            AGENT["🤖 AI Agent"]
+            TOOLS["🔧 Tools + Skills"]
+            TG_CH["📡 Telegram Channel"]
+            GW["Gateway :18789"]
+        end
+
+        subgraph Storage["Storage"]
+            R2["📦 R2 Bucket<br/>Config, sessions, workspace"]
+            DO["💾 Durable Object<br/>Container state"]
+        end
+
+        subgraph AI["AI"]
+            AIGW["🛡️ AI Gateway<br/>Logging, rate limiting, auth"]
+            MODEL["🧠 Workers AI<br/>nemotron-3-120b-a12b"]
+        end
+    end
+
+    TG -- "webhook POST /telegram" --> Worker
+    WEB -- "WebSocket wss://" --> Worker
+    Worker -- "proxy to :18789" --> GW
+    GW --> AGENT
+    AGENT --> TOOLS
+    AGENT --> TG_CH
+    TG_CH -- "reply" --> TG
+    AGENT -- "AI request" --> AIGW
+    AIGW -- "inference" --> MODEL
+    MODEL -- "response" --> AIGW
+    AIGW --> AGENT
+    Container -- "rclone sync<br/>every 30s" --> R2
+    R2 -- "restore on<br/>cold start" --> Container
+    Worker --> DO
+
+    classDef users fill:#e3f2fd,stroke:#1565c0,color:#000
+    classDef worker fill:#fff3e0,stroke:#e65100,color:#000
+    classDef container fill:#f3e5f5,stroke:#6a1b9a,color:#000
+    classDef storage fill:#e8f5e9,stroke:#2e7d32,color:#000
+    classDef ai fill:#fce4ec,stroke:#c62828,color:#000
+
+    class TG,WEB users
+    class AUTH,PROXY,LIFECYCLE worker
+    class AGENT,TOOLS,TG_CH,GW container
+    class R2,DO storage
+    class AIGW,MODEL ai
 ```
 
 | Resource | Name | Purpose |
