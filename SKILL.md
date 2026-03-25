@@ -162,7 +162,12 @@ Store as `{NAME}`.
 ## Step 1: Derive variables
 
 ```bash
-ACCOUNT_ID=$(wrangler whoami 2>&1 | grep -oE '[a-f0-9]{32}' | head -1)
+wrangler whoami 2>&1
+```
+
+Parse all account IDs from the output (32-char hex strings). If multiple accounts found, show them to the user and ask which one to use. If only one, use it automatically.
+
+```bash
 GATEWAY_TOKEN=$(openssl rand -hex 32)
 ```
 
