@@ -265,6 +265,7 @@ Tell user:
 > 4. Keep defaults (Permission: AI Gateway → Run, Account: your account)
 > 5. Click **Create Token**
 > 6. Copy the token and give it to me
+> 7. Then **enable the toggle** next to "Authenticated Gateway" to turn on authentication
 
 Store as `{AIG_TOKEN}`.
 
