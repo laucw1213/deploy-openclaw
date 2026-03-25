@@ -307,6 +307,7 @@ echo "{WORKER_URL}" | wrangler secret put WORKER_URL
 echo "true" | wrangler secret put DEV_MODE
 echo "true" | wrangler secret put DEBUG_ROUTES
 echo "${ACCOUNT_ID}" | wrangler secret put CF_ACCOUNT_ID
+echo "{R2_BUCKET}" | wrangler secret put R2_BUCKET_NAME
 ```
 
 If R2 keys available:
