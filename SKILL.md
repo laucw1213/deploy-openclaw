@@ -222,54 +222,52 @@ npm install
 
 ## Step 5: Create Cloudflare resources
 
-All automated via CF API using `{CF_API_TOKEN}`.
+### 5a. Create R2 Bucket (auto)
 
 ```bash
-# 5a. Create R2 Bucket (wrangler CLI)
 CLOUDFLARE_ACCOUNT_ID=${ACCOUNT_ID} wrangler r2 bucket create {R2_BUCKET}
+```
 
-# 5b. Create AI Gateway
+### 5b. Create AI Gateway (auto)
+
+```bash
 node -e "
 const https = require('https');
-const data = JSON.stringify({id:'{GATEWAY_ID}',name:'{GATEWAY_ID}'});
+const data = JSON.stringify({id:'{GATEWAY_ID}',name:'{GATEWAY_ID}',collect_logs:true,rate_limiting_interval:0,rate_limiting_limit:0,rate_limiting_technique:'fixed',cache_ttl:0,cache_invalidate_on_update:true});
 const opts = {
   hostname: 'api.cloudflare.com',
   path: '/client/v4/accounts/${ACCOUNT_ID}/ai-gateway/gateways',
   method: 'POST',
-  headers: { 'Authorization': 'Bearer ${CF_API_TOKEN}', 'Content-Type': 'application/json', 'Content-Length': data.length }
+  headers: { 'Authorization': 'Bearer ${CF_API_TOKEN}', 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
 };
 const req = https.request(opts, res => {
   let d=''; res.on('data', c => d += c);
-  res.on('end', () => { const r = JSON.parse(d); console.log(r.success ? 'Created' : r.errors?.[0]?.message || 'Already exists'); });
-});
-req.write(data); req.end();
-"
-
-# 5c. Create AI Gateway Token
-node -e "
-const https = require('https');
-const data = JSON.stringify({name:'{NAME}-token'});
-const opts = {
-  hostname: 'api.cloudflare.com',
-  path: '/client/v4/accounts/${ACCOUNT_ID}/ai-gateway/gateways/{GATEWAY_ID}/tokens',
-  method: 'POST',
-  headers: { 'Authorization': 'Bearer ${CF_API_TOKEN}', 'Content-Type': 'application/json', 'Content-Length': data.length }
-};
-const req = https.request(opts, res => {
-  let d=''; res.on('data', c => d += c);
-  res.on('end', () => { try { const r = JSON.parse(d); console.log(r.result?.token || ''); } catch(e) { console.log(''); } });
+  res.on('end', () => { const r = JSON.parse(d); console.log(r.success ? 'AI Gateway created' : r.errors?.[0]?.message || 'Already exists'); });
 });
 req.write(data); req.end();
 "
 ```
 
-Capture the AI Gateway Token output as `{AIG_TOKEN}`.
+### 5c. Create AI Gateway Authentication Token (manual — no API available)
 
-If `{AIG_TOKEN}` is empty, ask user:
-> Could not auto-create AI Gateway Token. Please go to CF Dashboard → AI → AI Gateway → {GATEWAY_ID} → Create Token, then give me the token.
+Open the gateway settings page for the user:
 
 ```bash
-# 5d. Create R2 API Token
+open "https://dash.cloudflare.com/${ACCOUNT_ID}/ai/ai-gateway/gateways/{GATEWAY_ID}"
+```
+
+Tell user:
+
+> I've opened the AI Gateway page. Please:
+> 1. Click **Settings** tab
+> 2. Find **Authentication** → click **Create Token**
+> 3. Copy the token and give it to me
+
+Store as `{AIG_TOKEN}`.
+
+### 5d. Create R2 API Token (auto)
+
+```bash
 node -e "
 const https = require('https');
 const data = JSON.stringify({name:'{NAME}-r2',permissions:['object-read-write'],buckets:['{R2_BUCKET}'],ttl:0});
@@ -277,7 +275,7 @@ const opts = {
   hostname: 'api.cloudflare.com',
   path: '/client/v4/accounts/${ACCOUNT_ID}/r2/tokens',
   method: 'POST',
-  headers: { 'Authorization': 'Bearer ${CF_API_TOKEN}', 'Content-Type': 'application/json', 'Content-Length': data.length }
+  headers: { 'Authorization': 'Bearer ${CF_API_TOKEN}', 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
 };
 const req = https.request(opts, res => {
   let d=''; res.on('data', c => d += c);
@@ -289,8 +287,18 @@ req.write(data); req.end();
 
 Parse the output JSON to get `{R2_ACCESS_KEY}` and `{R2_SECRET_KEY}`.
 
-If empty, ask user:
-> Could not auto-create R2 API Token. Please go to CF Dashboard → R2 → Manage R2 API Tokens → Create Account API Token (Object Read & Write, bucket: {R2_BUCKET}), then give me the Access Key ID and Secret Access Key.
+If empty, open R2 token page for user:
+
+```bash
+open "https://dash.cloudflare.com/${ACCOUNT_ID}/r2/api-tokens"
+```
+
+Tell user:
+> I've opened the R2 API Token page. Please:
+> 1. Click **Create Account API Token**
+> 2. Permission: **Object Read & Write**
+> 3. Bucket: **{R2_BUCKET}**
+> 4. Click **Create** and give me the Access Key ID and Secret Access Key
 
 ## Step 6: Set secrets
 
