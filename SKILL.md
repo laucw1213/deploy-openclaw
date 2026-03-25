@@ -127,27 +127,16 @@ Store as `{NAME}`.
 
 ```bash
 ACCOUNT_ID=$(wrangler whoami 2>&1 | grep -oE '[a-f0-9]{32}' | head -1)
-OAUTH_TOKEN=$(wrangler oauth-token 2>/dev/null)
 GATEWAY_TOKEN=$(openssl rand -hex 32)
 ```
 
-Get workers subdomain from CF Dashboard or:
+Computed values (no API calls needed):
 
-```bash
-curl -s --max-time 10 "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/subdomain" \
-  -H "Authorization: Bearer ${OAUTH_TOKEN}" | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log(d.result?.subdomain||'')"
-```
-
-If subdomain cannot be obtained via API, ask the user:
-
-> What is your Cloudflare Workers subdomain? You can find it at: CF Dashboard → Workers & Pages → Overview (bottom of page shows `xxx.workers.dev`)
-
-Computed values:
-
-- `WORKER_URL` = `https://{NAME}.{SUBDOMAIN}.workers.dev`
 - `R2_BUCKET` = `{NAME}-data`
 - `GATEWAY_ID` = `{NAME}-gateway`
 - `MODEL_ID` = `workers-ai/{USER_MODEL}`
+
+Note: `WORKER_URL` will be obtained from the deploy output in Step 7. Do not set it yet.
 
 Save `GATEWAY_TOKEN` — user needs it to access the dashboard.
 
@@ -168,10 +157,6 @@ sed -i '' 's/moltbot-sandbox/{NAME}/g' wrangler.jsonc
 sed -i '' 's/moltbot-data/{NAME}-data/g' wrangler.jsonc
 ```
 
-No other file changes needed:
-- Dockerfile: already has correct Node.js + OpenClaw versions
-- start-openclaw.sh: auth order already correct, allowedOrigins reads from WORKER_URL env var
-
 ## Step 4: Install dependencies
 
 ```bash
@@ -181,86 +166,104 @@ npm install
 
 ## Step 5: Create Cloudflare resources
 
-Run each. Ignore errors if resource already exists.
+These use wrangler CLI only — no API tokens needed.
 
 ```bash
-# Create AI Gateway
-curl -s -X POST "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/ai-gateway/gateways" \
-  -H "Authorization: Bearer ${OAUTH_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"id":"{GATEWAY_ID}","name":"{GATEWAY_ID}"}'
-
-# Create AI Gateway Token
-AIG_TOKEN_RESP=$(curl -s -X POST "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/ai-gateway/gateways/{GATEWAY_ID}/tokens" \
-  -H "Authorization: Bearer ${OAUTH_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"{NAME}-token"}')
-AIG_TOKEN=$(echo "$AIG_TOKEN_RESP" | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log(d.result?.token||'')")
-
 # Create R2 Bucket
 CLOUDFLARE_ACCOUNT_ID=${ACCOUNT_ID} wrangler r2 bucket create {R2_BUCKET}
-
-# Create R2 API Token
-R2_TOKEN_RESP=$(curl -s -X POST "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/r2/tokens" \
-  -H "Authorization: Bearer ${OAUTH_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"{NAME}-r2","permissions":["object-read-write"],"buckets":["{R2_BUCKET}"],"ttl":0}')
-R2_ACCESS_KEY=$(echo "$R2_TOKEN_RESP" | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log(d.result?.access_key_id||d.result?.accessKeyId||'')")
-R2_SECRET_KEY=$(echo "$R2_TOKEN_RESP" | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log(d.result?.secret_access_key||d.result?.secretAccessKey||'')")
 ```
 
-If `AIG_TOKEN` is empty, ask user:
-> I couldn't auto-create the AI Gateway Token. Please go to CF Dashboard → AI → AI Gateway → {GATEWAY_ID} → Create Token, then give me the token value.
+AI Gateway and tokens will be created manually by the user (see Step 6).
 
-If `R2_ACCESS_KEY` is empty, ask user:
-> I couldn't auto-create the R2 API Token. Please go to CF Dashboard → R2 → Manage R2 API Tokens → Create Account API Token (Object Read & Write, bucket: {R2_BUCKET}), then give me the Access Key ID and Secret Access Key.
+Ask user to create these in CF Dashboard:
 
-## Step 6: Set secrets
+> I need you to create a few things in the Cloudflare Dashboard:
+>
+> **1. AI Gateway:**
+> Go to CF Dashboard → AI → AI Gateway → Create Gateway
+> - Name: `{GATEWAY_ID}`
+> - Then click on the gateway → Create Token → give me the token value
+>
+> **2. R2 API Token (optional, for data persistence):**
+> Go to CF Dashboard → R2 → Manage R2 API Tokens → Create Account API Token
+> - Permission: Object Read & Write
+> - Bucket: `{R2_BUCKET}`
+> - Give me the Access Key ID and Secret Access Key
+
+Store AI Gateway Token as `{AIG_TOKEN}`.
+Store R2 keys as `{R2_ACCESS_KEY}` and `{R2_SECRET_KEY}` (empty if user skips).
+
+## Step 6: Set secrets (except WORKER_URL)
 
 Run each from `{WORK_DIR}`. If `wrangler secret put` fails, use `wrangler versions secret put` as fallback.
 
 ```bash
 cd {WORK_DIR}
 echo "sk-ant-dummy-bypass-key-not-real" | wrangler secret put ANTHROPIC_API_KEY
-echo "${AIG_TOKEN}" | wrangler secret put CLOUDFLARE_AI_GATEWAY_API_KEY
+echo "{AIG_TOKEN}" | wrangler secret put CLOUDFLARE_AI_GATEWAY_API_KEY
 echo "${ACCOUNT_ID}" | wrangler secret put CF_AI_GATEWAY_ACCOUNT_ID
 echo "{GATEWAY_ID}" | wrangler secret put CF_AI_GATEWAY_GATEWAY_ID
 echo "{MODEL_ID}" | wrangler secret put CF_AI_GATEWAY_MODEL
 echo "${GATEWAY_TOKEN}" | wrangler secret put MOLTBOT_GATEWAY_TOKEN
 echo "{TELEGRAM_TOKEN}" | wrangler secret put TELEGRAM_BOT_TOKEN
-echo "{WORKER_URL}" | wrangler secret put WORKER_URL
 echo "true" | wrangler secret put DEV_MODE
 echo "true" | wrangler secret put DEBUG_ROUTES
 echo "${ACCOUNT_ID}" | wrangler secret put CF_ACCOUNT_ID
-echo "${R2_ACCESS_KEY}" | wrangler secret put R2_ACCESS_KEY_ID
-echo "${R2_SECRET_KEY}" | wrangler secret put R2_SECRET_ACCESS_KEY
 ```
 
-## Step 7: Deploy
+If user provided R2 keys:
+
+```bash
+echo "{R2_ACCESS_KEY}" | wrangler secret put R2_ACCESS_KEY_ID
+echo "{R2_SECRET_KEY}" | wrangler secret put R2_SECRET_ACCESS_KEY
+```
+
+Note: WORKER_URL is NOT set yet — we get it from deploy output next.
+
+## Step 7: Deploy and get WORKER_URL
 
 ```bash
 cd {WORK_DIR}
-npm run deploy
+npm run deploy 2>&1 | tee /tmp/deploy-output.txt
 ```
 
-Takes 3-5 minutes on first run (Docker build + push + deploy). Ensure Docker is running.
+Takes 3-5 minutes on first run. Ensure Docker is running.
+
+Parse the Worker URL from deploy output. Look for a line like:
+
+```
+  https://mc-dev.masterconcept-hongkong.workers.dev
+```
+
+Extract it:
+
+```bash
+WORKER_URL=$(grep -oE 'https://[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev' /tmp/deploy-output.txt | head -1)
+```
+
+Now set the WORKER_URL secret:
+
+```bash
+cd {WORK_DIR}
+echo "${WORKER_URL}" | wrangler versions secret put WORKER_URL
+```
 
 ## Step 8: Set Telegram webhook
 
 ```bash
-curl -s "https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook?url={WORKER_URL}/telegram"
+curl -s "https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook?url=${WORKER_URL}/telegram"
 ```
 
 ## Step 9: Wait for container and pair Telegram
 
 1. Trigger container:
 ```bash
-curl -s --max-time 10 "{WORKER_URL}/" > /dev/null
+curl -s --max-time 10 "${WORKER_URL}/" > /dev/null
 ```
 
 2. Wait 1-3 minutes. Poll every 15 seconds:
 ```bash
-curl -s --max-time 10 "{WORKER_URL}/debug/gateway-api?path=/health"
+curl -s --max-time 10 "${WORKER_URL}/debug/gateway-api?path=/health"
 ```
 Ready when response does NOT contain "not listening".
 
@@ -269,12 +272,12 @@ Ready when response does NOT contain "not listening".
 
 4. Poll for pairing code (every 10 seconds, up to 3 minutes):
 ```bash
-curl -s --max-time 10 "{WORKER_URL}/debug/cli?cmd=cat+/root/.openclaw/devices/pending.json"
+curl -s --max-time 10 "${WORKER_URL}/debug/cli?cmd=cat+/root/.openclaw/devices/pending.json"
 ```
 
 5. When code appears, approve:
 ```bash
-curl -s --max-time 15 "{WORKER_URL}/debug/cli?cmd=openclaw+pairing+approve+telegram+{CODE}"
+curl -s --max-time 15 "${WORKER_URL}/debug/cli?cmd=openclaw+pairing+approve+telegram+{CODE}"
 ```
 
 6. Confirm to user:
@@ -283,7 +286,7 @@ curl -s --max-time 15 "{WORKER_URL}/debug/cli?cmd=openclaw+pairing+approve+teleg
 If pairing times out:
 > 1. Send "hi" to your bot in Telegram
 > 2. Copy the pairing code from the bot's reply
-> 3. Open: `{WORKER_URL}/debug/cli?cmd=openclaw+pairing+approve+telegram+CODE`
+> 3. Open: `${WORKER_URL}/debug/cli?cmd=openclaw+pairing+approve+telegram+CODE`
 
 ## Final output
 
@@ -305,7 +308,7 @@ Save the Gateway Token — you need it to access the Dashboard.
 - Container not starting → `curl -s "{WORKER_URL}/debug/processes?logs=true"`
 - Check secrets → `curl -s "{WORKER_URL}/debug/env"`
 - View config → `curl -s "{WORKER_URL}/debug/container-config"`
-- "origin not allowed" → WORKER_URL secret not set correctly
+- "origin not allowed" → WORKER_URL secret not set, run: `echo "URL" | wrangler versions secret put WORKER_URL`
 - Telegram no response → `curl -s "https://api.telegram.org/bot{TELEGRAM_TOKEN}/getWebhookInfo"`
 - "openclaw requires Node >= X" → Dockerfile Node version too old
 - Onboard hangs → ANTHROPIC_API_KEY secret not set
