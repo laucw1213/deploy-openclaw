@@ -103,94 +103,9 @@ flowchart TD
 
 ## Security architecture
 
-Three zones — Internet (left), Cloudflare (middle), Users (right) — with security at every boundary:
+Three zones — Users (left), Cloudflare (middle), Internet (right) — with security at every boundary:
 
-```mermaid
-flowchart LR
-    subgraph INTERNET["🌐 Internet"]
-        direction TB
-        SEARCH["🔍 Web Search"]
-        BROWSE["🌐 Web Browse"]
-        API_EXT["📡 External APIs"]
-        LLM["🧠 Workers AI<br/>nemotron-3-120b-a12b"]
-    end
-
-    subgraph CF["☁️ Cloudflare"]
-        direction TB
-        subgraph EDGE["🔒 Edge (DDoS + WAF)"]
-            CFN["Cloudflare Network"]
-        end
-
-        subgraph WORKER["🔒 Worker (Moltworker)"]
-            AUTH["Token Validation<br/>MOLTBOT_GATEWAY_TOKEN"]
-            CFA["CF Access<br/>Zero Trust SSO"]
-            PROXY["Request Proxy"]
-        end
-
-        subgraph AIGW_SUB["🔒 AI Gateway"]
-            AIGW["cf-aig-authorization<br/>Rate limiting + Logging"]
-        end
-
-        subgraph PRIVATE["🔒 Private Network 10.0.0.1"]
-            subgraph CONTAINER["Container (OpenClaw)"]
-                GW["Gateway :18789<br/>Token + Device pairing"]
-                AGENT["🤖 AI Agent"]
-                TOOLS["🔧 Tools + Skills"]
-                TG_CH["📡 Telegram Channel"]
-            end
-        end
-
-        subgraph STORAGE["🔒 Storage"]
-            R2["📦 R2 Bucket<br/>S3 Access Key<br/>Per-bucket isolation"]
-            DO["💾 Durable Object"]
-        end
-    end
-
-    subgraph USERS["👤 Users"]
-        direction TB
-        TG["📱 Telegram<br/>Paired users only"]
-        WEB["🌐 Dashboard<br/>Token + CF Access"]
-        ADMIN["⚙️ Admin Panel<br/>CF Access protected"]
-    end
-
-    TG -- "webhook POST<br/>/telegram" --> CFN
-    WEB -- "wss:// + token" --> CFN
-    ADMIN -- "CF Access JWT" --> CFN
-    CFN --> AUTH
-    CFN --> CFA
-    AUTH --> PROXY
-    CFA --> PROXY
-    PROXY -- "private network" --> GW
-    GW --> AGENT
-    AGENT --> TOOLS
-    AGENT --> TG_CH
-    TG_CH -- "reply<br/>paired only" --> TG
-    AGENT -- "cf-aig-auth" --> AIGW
-    AIGW --> LLM
-    AGENT --> SEARCH
-    AGENT --> BROWSE
-    AGENT --> API_EXT
-    CONTAINER -- "rclone sync<br/>every 30s" --> R2
-    R2 -- "restore on<br/>cold start" --> CONTAINER
-    WORKER --> DO
-
-    classDef internet fill:#e3f2fd,stroke:#1565c0,color:#000
-    classDef edge fill:#fff3e0,stroke:#e65100,color:#000
-    classDef worker fill:#fff8e1,stroke:#f57f17,color:#000
-    classDef aigw fill:#fce4ec,stroke:#c62828,color:#000
-    classDef private fill:#e8eaf6,stroke:#283593,color:#000
-    classDef container fill:#e8f5e9,stroke:#2e7d32,color:#000
-    classDef storage fill:#e0f2f1,stroke:#00695c,color:#000
-    classDef users fill:#f3e5f5,stroke:#6a1b9a,color:#000
-
-    class SEARCH,BROWSE,API_EXT,LLM internet
-    class CFN edge
-    class AUTH,CFA,PROXY worker
-    class AIGW aigw
-    class GW,AGENT,TOOLS,TG_CH container
-    class R2,DO storage
-    class TG,WEB,ADMIN users
-```
+![Security Architecture](diagram.png)
 
 ### Security layers explained
 
