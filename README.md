@@ -2,22 +2,33 @@
 
 ## What is this?
 
-An **AI Skill** that automatically deploys an [OpenClaw](https://github.com/openclaw/openclaw) AI Bot on [Cloudflare](https://cloudflare.com).
+An **AI Skill** that automatically deploys an [OpenClaw](https://github.com/openclaw/openclaw) AI Bot on [Cloudflare](https://cloudflare.com). Give your AI agent (Claude Code, Claude Desktop, or OpenClaw itself) the `SKILL.md` file, and it handles everything — from installing tools to deploying your bot.
 
-OpenClaw is an open-source AI agent that runs on Cloudflare's edge network. This skill packages everything needed to go from zero to a working AI bot — including infrastructure setup, deployment, and Telegram integration.
+## What do you get?
 
-The key file is **`SKILL.md`** — a detailed instruction set designed for AI agents (Claude Code, Claude Desktop, OpenClaw) to read and execute autonomously.
+After deployment, you have:
 
-## What can it do?
+| What | Description |
+|------|-------------|
+| **Telegram AI Bot** | Your own AI assistant in Telegram — chat, ask questions, run tools |
+| **Web Dashboard** | Browser-based control panel — view conversations, change settings, manage skills |
+| **Admin Panel** | Monitor container health, R2 backups, paired devices, restart gateway |
+| **Persistent Storage** | Conversations, config, and skills auto-sync to R2 — survives container restarts |
 
-- **Deploy a Telegram AI Bot** — chat with your own AI assistant in Telegram
-- **Set up a Web Dashboard** — monitor and control your bot from a browser
-- **Auto-install everything** — Node.js, Docker, wrangler CLI, all from scratch
-- **Auto-create cloud resources** — R2 storage, AI Gateway, Worker, Container
-- **Auto-configure 14 secrets** — API keys, tokens, environment variables
-- **Auto-pair Telegram** — connect your bot to Telegram with pairing approval
-- **Persist data** — conversations, config, and skills survive container restarts via R2 sync
-- **Run on Cloudflare's edge** — low latency, global availability, serverless scaling
+### What's running behind the scenes
+
+| Component | Role | Analogy |
+|-----------|------|---------|
+| **[OpenClaw](https://github.com/openclaw/openclaw)** | Open-source AI agent — handles conversations, memory, tools, Telegram | The brain |
+| **[Moltworker](https://github.com/cloudflare/moltworker)** | Cloudflare Worker — manages auth, routing, container lifecycle | The body |
+| **AI Gateway** | Cloudflare proxy for AI requests — logging, rate limiting, auth | The shield |
+| **R2 Storage** | Cloud object storage — persists data when container sleeps | The memory |
+
+### How to use it
+
+- **Telegram** — just send a message, the bot replies
+- **Dashboard** — open `https://{name}.{subdomain}.workers.dev/?token={TOKEN}` in browser
+- **Admin** — open `https://{name}.{subdomain}.workers.dev/_admin/` for container management
 
 ## Who is this for?
 
@@ -90,67 +101,119 @@ flowchart TD
 | 🔴 **You do** | 6 steps | Create tokens, send "hi", click Approve |
 | 🟢 **AI does** | 11 steps | Install, build, deploy, configure, everything else |
 
-## Architecture
+## Security architecture
+
+Three zones — Internet (left), Cloudflare (middle), Users (right) — with security at every boundary:
 
 ```mermaid
-flowchart TD
-    subgraph Users["👤 Users"]
-        TG["📱 Telegram"]
-        WEB["🌐 Web Dashboard"]
+flowchart LR
+    subgraph INTERNET["🌐 Internet"]
+        direction TB
+        SEARCH["🔍 Web Search"]
+        BROWSE["🌐 Web Browse"]
+        API_EXT["📡 External APIs"]
+        LLM["🧠 Workers AI<br/>nemotron-3-120b-a12b"]
     end
 
-    subgraph CF["☁️ Cloudflare Global Network"]
-        subgraph Worker["Worker (Moltworker)"]
-            AUTH["Auth + Token check"]
-            PROXY["Request proxy"]
-            LIFECYCLE["Container lifecycle"]
+    subgraph CF["☁️ Cloudflare"]
+        direction TB
+        subgraph EDGE["🔒 Edge (DDoS + WAF)"]
+            CFN["Cloudflare Network"]
         end
 
-        subgraph Container["Container (OpenClaw)"]
-            AGENT["🤖 AI Agent"]
-            TOOLS["🔧 Tools + Skills"]
-            TG_CH["📡 Telegram Channel"]
-            GW["Gateway :18789"]
+        subgraph WORKER["🔒 Worker (Moltworker)"]
+            AUTH["Token Validation<br/>MOLTBOT_GATEWAY_TOKEN"]
+            CFA["CF Access<br/>Zero Trust SSO"]
+            PROXY["Request Proxy"]
         end
 
-        subgraph Storage["Storage"]
-            R2["📦 R2 Bucket<br/>Config, sessions, workspace"]
-            DO["💾 Durable Object<br/>Container state"]
+        subgraph AIGW_SUB["🔒 AI Gateway"]
+            AIGW["cf-aig-authorization<br/>Rate limiting + Logging"]
         end
 
-        subgraph AI["AI"]
-            AIGW["🛡️ AI Gateway<br/>Logging, rate limiting, auth"]
-            MODEL["🧠 Workers AI<br/>nemotron-3-120b-a12b"]
+        subgraph PRIVATE["🔒 Private Network 10.0.0.1"]
+            subgraph CONTAINER["Container (OpenClaw)"]
+                GW["Gateway :18789<br/>Token + Device pairing"]
+                AGENT["🤖 AI Agent"]
+                TOOLS["🔧 Tools + Skills"]
+                TG_CH["📡 Telegram Channel"]
+            end
+        end
+
+        subgraph STORAGE["🔒 Storage"]
+            R2["📦 R2 Bucket<br/>S3 Access Key<br/>Per-bucket isolation"]
+            DO["💾 Durable Object"]
         end
     end
 
-    TG -- "webhook POST /telegram" --> Worker
-    WEB -- "WebSocket wss://" --> Worker
-    Worker -- "proxy to :18789" --> GW
+    subgraph USERS["👤 Users"]
+        direction TB
+        TG["📱 Telegram<br/>Paired users only"]
+        WEB["🌐 Dashboard<br/>Token + CF Access"]
+        ADMIN["⚙️ Admin Panel<br/>CF Access protected"]
+    end
+
+    TG -- "webhook POST<br/>/telegram" --> CFN
+    WEB -- "wss:// + token" --> CFN
+    ADMIN -- "CF Access JWT" --> CFN
+    CFN --> AUTH
+    CFN --> CFA
+    AUTH --> PROXY
+    CFA --> PROXY
+    PROXY -- "private network" --> GW
     GW --> AGENT
     AGENT --> TOOLS
     AGENT --> TG_CH
-    TG_CH -- "reply" --> TG
-    AGENT -- "AI request" --> AIGW
-    AIGW -- "inference" --> MODEL
-    MODEL -- "response" --> AIGW
-    AIGW --> AGENT
-    Container -- "rclone sync<br/>every 30s" --> R2
-    R2 -- "restore on<br/>cold start" --> Container
-    Worker --> DO
+    TG_CH -- "reply<br/>paired only" --> TG
+    AGENT -- "cf-aig-auth" --> AIGW
+    AIGW --> LLM
+    AGENT --> SEARCH
+    AGENT --> BROWSE
+    AGENT --> API_EXT
+    CONTAINER -- "rclone sync<br/>every 30s" --> R2
+    R2 -- "restore on<br/>cold start" --> CONTAINER
+    WORKER --> DO
 
-    classDef users fill:#e3f2fd,stroke:#1565c0,color:#000
-    classDef worker fill:#fff3e0,stroke:#e65100,color:#000
-    classDef container fill:#f3e5f5,stroke:#6a1b9a,color:#000
-    classDef storage fill:#e8f5e9,stroke:#2e7d32,color:#000
-    classDef ai fill:#fce4ec,stroke:#c62828,color:#000
+    classDef internet fill:#e3f2fd,stroke:#1565c0,color:#000
+    classDef edge fill:#fff3e0,stroke:#e65100,color:#000
+    classDef worker fill:#fff8e1,stroke:#f57f17,color:#000
+    classDef aigw fill:#fce4ec,stroke:#c62828,color:#000
+    classDef private fill:#e8eaf6,stroke:#283593,color:#000
+    classDef container fill:#e8f5e9,stroke:#2e7d32,color:#000
+    classDef storage fill:#e0f2f1,stroke:#00695c,color:#000
+    classDef users fill:#f3e5f5,stroke:#6a1b9a,color:#000
 
-    class TG,WEB users
-    class AUTH,PROXY,LIFECYCLE worker
-    class AGENT,TOOLS,TG_CH,GW container
+    class SEARCH,BROWSE,API_EXT,LLM internet
+    class CFN edge
+    class AUTH,CFA,PROXY worker
+    class AIGW aigw
+    class GW,AGENT,TOOLS,TG_CH container
     class R2,DO storage
-    class AIGW,MODEL ai
+    class TG,WEB,ADMIN users
 ```
+
+### Security layers explained
+
+| Layer | Protection | Auth mechanism |
+|-------|-----------|----------------|
+| **1. Cloudflare Edge** | DDoS, WAF, bot protection | Automatic |
+| **2. Worker** | Route-level auth | `MOLTBOT_GATEWAY_TOKEN` + CF Access (production) |
+| **3. Private Network** | No public IP | Container only reachable from Worker via `10.0.0.1` |
+| **4. OpenClaw Gateway** | Dashboard + API access | Token auth + device pairing |
+| **5. AI Gateway** | AI request protection | `cf-aig-authorization` token + rate limiting |
+| **6. Storage** | Data protection | Private R2 bucket + S3 credentials (per-bucket) |
+| **Telegram** | DM access | Pairing policy — only approved users can chat |
+
+### DEV_MODE vs Production
+
+| | DEV_MODE=true (default) | Production (DEV_MODE=false) |
+|---|---|---|
+| `/_admin/` | Anyone with URL | CF Access SSO required |
+| `/debug/*` | Anyone with URL | CF Access SSO required |
+| Dashboard | Gateway Token only | CF Access + Gateway Token |
+| Telegram | Pairing required | Pairing required |
+
+> **Tip:** For personal use, DEV_MODE=true is fine. For company use, set `DEV_MODE=false` and configure [Cloudflare Zero Trust Access](https://developers.cloudflare.com/cloudflare-one/).
 
 ## What gets created on Cloudflare
 
